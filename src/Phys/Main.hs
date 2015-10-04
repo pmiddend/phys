@@ -2,9 +2,9 @@
 module Main where
 
 import Graphics.Gloss(play,Display(..))
-import Graphics.Gloss.Data.Color(white,red,black)
-import Graphics.Gloss.Data.Picture(Picture,circle,color,pictures)
-import ClassyPrelude
+import Graphics.Gloss.Data.Color(green,white,red,black)
+import Graphics.Gloss.Data.Picture(Picture,circle,color,pictures,thickCircle,text)
+import ClassyPrelude hiding (lines)
 import Control.Lens(to,(&),(.~),(+~),makeLenses,(^.))
 import Numeric.Lens(dividing)
 import Phys.Number
@@ -28,21 +28,55 @@ data Ball = Ball {
 
 $(makeLenses ''Ball)                
 
+data Goal = Goal {
+    _goalPos :: Point
+  , _goalRadius :: Number
+  } deriving(Show)
+
+$(makeLenses ''Goal)           
+
 data World = World {
     _worldBall :: Ball
   , _worldMatters :: [Matter]
   , _worldTicks :: Tick
+  , _worldGoal :: Goal
   } deriving(Show)
 
+data GameState =
+    GameStateRunning World
+  | GameStateFinished World
+  | GameStateGameOver World
+
 $(makeLenses ''World)
+
+matterToPicture :: Tick -> Matter -> Picture
+matterToPicture t m =
+  let 
+    radiusBase = m ^. matterMass . to abs . dividing 1000
+    radius = radiusBase + 5 * (abs (sin (5 * t)))
+    smallLine circlePoint = (circlePoint ^* radius,circlePoint ^* (radius+10))
+  in
+    color red (lines ((smallLine . angle . (+t) . (*(2*pi)) . (/10)) <$> [0..20]))
+
+ballToPicture :: Ball -> Picture
+ballToPicture b = color white (circle 4)
+
+goalToPicture :: Goal -> Picture
+goalToPicture g = color green (circle (g ^. goalRadius))
+
+stateToPicture :: GameState -> Picture
+stateToPicture (GameStateRunning w) = worldToPicture w
+stateToPicture (GameStateFinished w) = worldToPicture w
+stateToPicture (GameStateGameOver w) = worldToPicture w
 
 worldToPicture :: World -> Picture
 worldToPicture w =
   let
-    ball = translate (w ^. worldBall . ballPos) (color white (circle 4))
-    matters = map (\m -> translate (m ^. matterPos) (color red (circle (m ^. matterMass . to abs . dividing 1000)))) (w ^. worldMatters)
+    ball = translate (w ^. worldBall . ballPos) (ballToPicture (w ^. worldBall))
+    goal = translate (w ^. worldGoal . goalPos) (goalToPicture (w ^. worldGoal))
+    matters = (\m -> translate (m ^. matterPos) (matterToPicture (w ^. worldTicks) m)) <$> (w ^. worldMatters)
   in
-    pictures $ [ball] <> matters
+    ball <> goal <> pictures matters
 
 data Derivative = Derivative {
     _derivPos :: Point
@@ -93,8 +127,13 @@ rk4Step s dt =
   in
     s & worldBall . ballPos +~ dxdt ^* dt & worldBall . ballVel +~ dvdt ^* dt
 
-stepWorld :: Tick -> World -> World
-stepWorld d w = rk4Step w (10 * d)
+stepState :: Tick -> GameState -> GameState
+stepState d (GameStateRunning w) =
+  let
+    physicsWorld = rk4Step w (10 * d)
+  in
+    GameStateRunning (physicsWorld & worldTicks +~ d)
+stepState _ s = s
 
 main :: IO ()
 main =
@@ -120,13 +159,18 @@ main =
         , _matterMass = 30000
         }
       ]
+    goal =
+      Goal {
+          _goalPos = point 300 0
+        , _goalRadius = 40
+      }
     initialWorld =
       World{
             _worldBall = initialBall
           , _worldMatters = initialMatters
           , _worldTicks = 0
+          , _worldGoal = goal             
           }
     handleEvent event world = world
   in
-    play displayMode backgroundColor fps initialWorld worldToPicture handleEvent stepWorld
- 
+    play displayMode backgroundColor fps (GameStateRunning initialWorld) stateToPicture handleEvent stepState
