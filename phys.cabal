@@ -17,7 +17,7 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 executable phys
-  main-is:             src/Phys/Main.hs
+  main-is:             Phys/Main.hs
   -- other-modules:       
   -- other-extensions:    
   build-depends:       base >=4.7 && <4.9
@@ -25,7 +25,7 @@ executable phys
                      , gloss
                      , lens
                      , linear
-  -- hs-source-dirs:     src
+  hs-source-dirs:     src
   default-language:    Haskell2010
   default-extensions:  OverloadedStrings,NoImplicitPrelude
   ghc-options: -threaded
