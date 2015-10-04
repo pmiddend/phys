@@ -94,7 +94,7 @@ rk4Step s dt =
     s & worldBall . ballPos +~ dxdt ^* dt & worldBall . ballVel +~ dvdt ^* dt
 
 stepWorld :: Tick -> World -> World
-stepWorld d w = rk4Step w d
+stepWorld d w = rk4Step w (10 * d)
 
 main :: IO ()
 main =
