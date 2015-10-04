@@ -1,4 +1,4 @@
-module Phys.Point(Point,_x,_y,point,(^*),(*^),norm,(^/),angle) where
+module Phys.Point(Point,_x,_y,point,(^*),(*^),norm,(^/),angle,distance) where
 
 import Linear.V2
 import Linear.Vector

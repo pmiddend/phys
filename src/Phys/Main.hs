@@ -3,8 +3,10 @@ module Main where
 
 import Graphics.Gloss(play,Display(..))
 import Graphics.Gloss.Data.Color(green,white,red,black)
-import Graphics.Gloss.Data.Picture(Picture,circle,color,pictures,thickCircle,text)
-import ClassyPrelude hiding (lines)
+import Data.Monoid(Any(..))
+import Data.Foldable(foldMap)
+import Graphics.Gloss.Data.Picture(Picture,circle,color,pictures,thickCircle,scale,text)
+import ClassyPrelude hiding (lines,foldMap)
 import Control.Lens(to,(&),(.~),(+~),makeLenses,(^.))
 import Numeric.Lens(dividing)
 import Phys.Number
@@ -24,6 +26,7 @@ data Ball = Ball {
     _ballPos :: Point
   , _ballVel :: Point
   , _ballMass :: Mass
+  , _ballRadius :: Number
   } deriving(Show)
 
 $(makeLenses ''Ball)                
@@ -59,15 +62,15 @@ matterToPicture t m =
     color red (lines ((smallLine . angle . (+t) . (*(2*pi)) . (/10)) <$> [0..20]))
 
 ballToPicture :: Ball -> Picture
-ballToPicture b = color white (circle 4)
+ballToPicture b = color white (circle (b ^. ballRadius))
 
 goalToPicture :: Goal -> Picture
 goalToPicture g = color green (circle (g ^. goalRadius))
 
 stateToPicture :: GameState -> Picture
 stateToPicture (GameStateRunning w) = worldToPicture w
-stateToPicture (GameStateFinished w) = worldToPicture w
-stateToPicture (GameStateGameOver w) = worldToPicture w
+stateToPicture (GameStateFinished w) = worldToPicture w <> (scale 0.1 0.1 $ color white $ translate (point 0 0) $ text "You did it!")
+stateToPicture (GameStateGameOver w) = worldToPicture w <> (scale 0.1 0.1 $ color white $ translate (point 0 0) $ text "Far out dude, game over!")
 
 worldToPicture :: World -> Picture
 worldToPicture w =
@@ -127,12 +130,24 @@ rk4Step s dt =
   in
     s & worldBall . ballPos +~ dxdt ^* dt & worldBall . ballVel +~ dvdt ^* dt
 
+collisionWithGoal :: World -> Bool
+collisionWithGoal w = distance (w ^. worldBall . ballPos) (w ^. worldGoal . goalPos) < (w ^. worldBall . ballRadius + w ^. worldGoal . goalRadius)
+
+outsideField :: World -> Bool
+outsideField w = getAny (foldMap Any (((> 1000) . abs) <$> (w ^. worldBall . ballPos)))
+
+collisionWithObstacle _ = False              
+
 stepState :: Tick -> GameState -> GameState
 stepState d (GameStateRunning w) =
   let
     physicsWorld = rk4Step w (10 * d)
   in
-    GameStateRunning (physicsWorld & worldTicks +~ d)
+    if collisionWithGoal w
+    then GameStateFinished physicsWorld
+    else if outsideField w || collisionWithObstacle w
+         then GameStateGameOver w
+         else GameStateRunning (physicsWorld & worldTicks +~ d)
 stepState _ s = s
 
 main :: IO ()
@@ -147,6 +162,7 @@ main =
       Ball{
           _ballPos = point (-100) 50
         , _ballVel = point 30 0
+        , _ballRadius = 4
         , _ballMass = 1
       }
     initialMatters =
